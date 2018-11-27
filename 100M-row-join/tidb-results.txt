@@ -1,0 +1,33 @@
+Inner join requires both tables to be accessed (TiDB does not support foreign key-based inner join elimination, nor have I added keys).
+TiDB currently does not support cost-based join reorder. See: https://pingcap.com/docs/ROADMAP/
+ -> The method used is "first fit", so order specified.
+
+
+mysql> EXPLAIN ANALYZE SELECT t1.* FROM t2 INNER JOIN t1 ON t2.table1id=t1.id WHERE t1.id=0;
++---------------------------+-------------+------+-----------------------------------------------+-------------------------------------+
+| id                        | count       | task | operator info                                 | execution info                      |
++---------------------------+-------------+------+-----------------------------------------------+-------------------------------------+
+| Projection_6              | 0.00        | root | test.t1.id, test.t1.b, test.t1.c              | time:16.241532437s, loops:1, rows:0 |
+| └─HashLeftJoin_7          | 0.00        | root | inner join, inner:TableReader_13              | time:16.241526255s, loops:1, rows:0 |
+|   ├─TableReader_11        | 119.24      | root | data:Selection_10                             | time:16.237681231s, loops:1, rows:0 |
+|   │ └─Selection_10        | 119.24      | cop  | eq(test.t2.table1id, 0)                       |                                     |
+|   │   └─TableScan_9       | 10602000.00 | cop  | table:t2, range:[-inf,+inf], keep order:false |                                     |
+|   └─TableReader_13        | 0.00        | root | data:TableScan_12                             | time:407.038µs, loops:1, rows:0     |
+|     └─TableScan_12        | 0.00        | cop  | table:t1, range:[0,0], keep order:false       |                                     |
++---------------------------+-------------+------+-----------------------------------------------+-------------------------------------+
+7 rows in set (16.25 sec)
+
+mysql> EXPLAIN ANALYZE SELECT t1.* FROM t1 INNER JOIN t2 ON t2.table1id=t1.id WHERE t1.id=0;
++--------------------------+-------------+------+-----------------------------------------------+------------------------------------+
+| id                       | count       | task | operator info                                 | execution info                     |
++--------------------------+-------------+------+-----------------------------------------------+------------------------------------+
+| Projection_6             | 0.00        | root | test.t1.id, test.t1.b, test.t1.c              | time:4.12823569s, loops:1, rows:0  |
+| └─HashRightJoin_8        | 0.00        | root | inner join, inner:TableReader_10              | time:4.128225481s, loops:1, rows:0 |
+|   ├─TableReader_10       | 0.00        | root | data:TableScan_9                              | time:15.028µs, loops:1, rows:0     |
+|   │ └─TableScan_9        | 0.00        | cop  | table:t1, range:[0,0], keep order:false       |                                    |
+|   └─TableReader_13       | 119.24      | root | data:Selection_12                             | time:4.128127626s, loops:1, rows:0 |
+|     └─Selection_12       | 119.24      | cop  | eq(0, test.t2.table1id)                       |                                    |
+|       └─TableScan_11     | 10602000.00 | cop  | table:t2, range:[-inf,+inf], keep order:false |                                    |
++--------------------------+-------------+------+-----------------------------------------------+------------------------------------+
+7 rows in set (4.13 sec)
+
