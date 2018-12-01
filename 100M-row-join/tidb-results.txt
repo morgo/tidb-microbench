@@ -1,3 +1,6 @@
+mysql test < schema.sql
+CONNECTION="root@tcp(localhost:4000)/test" ./bench/bench
+
 TiDB is slower on 3M rows than MySQL.  This is using either hash join, merge join (default; but not parallel), nlj
 
 mysql> explain analyze select  count(*) from a inner join b on a.b_id = b.id;
@@ -142,5 +145,375 @@ mysql> explain analyze select /*+ TIDB_hJ(a, b) */ count(*) from a inner join b 
 |     └─TableScan_23       | 2732147.00 | cop  | table:b, range:[-inf,+inf], keep order:false                         |                                              |
 +--------------------------+------------+------+----------------------------------------------------------------------+----------------------------------------------+
 6 rows in set (3.50 sec)
+
+
+## Test #2 ##
+
+Loaded to 70 million rows (70% of target)
+
+- Shows that the default Merge join is better than hash join (even though hash is parallel)
+- But parallel inlj (same behavior as mysql is the best).
+- Still does more work than mysql, because non-integer primary keys create a hidden index internally.
+- Without having to join (i.e. if all a.b_id values were NULL, TiDB is very fast).
+
+mysql [127.0.0.1] {root} (test) > SELECT count(*) FROM a;
++----------+
+| count(*) |
++----------+
+| 71266248 |
++----------+
+1 row in set (4.43 sec)
+
+mysql [127.0.0.1] {root} (test) > SELECT count(*) FROM b;
++----------+
+| count(*) |
++----------+
+| 67588908 |
++----------+
+1 row in set (3.93 sec)
+
+mysql [127.0.0.1] {root} (test) >
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE select count(*) from a inner join b on a.b_id = b.id;
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| id                       | count       | task | operator info                                                | execution info                                  |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                               | time:29.28001646s, loops:2, rows:1              |
+| └─MergeJoin_236          | 89081241.25 | root | inner join, left key:test.a.b_id, right key:test.b.id        | time:29.280009901s, loops:2, rows:1             |
+|   ├─IndexReader_77       | 71264993.00 | root | index:IndexScan_76                                           | time:3.955939009s, loops:2227073, rows:71266248 |
+|   │ └─IndexScan_76       | 71264993.00 | cop  | table:a, index:b_id, c77, range:[NULL,+inf], keep order:true | time:0s, loops:0, rows:71266248                 |
+|   └─IndexReader_231      | 67655313.00 | root | index:IndexScan_230                                          | time:8.614188436s, loops:2112146, rows:67588672 |
+|     └─IndexScan_230      | 67655313.00 | cop  | table:b, index:id, range:[NULL,+inf], keep order:true        | time:0s, loops:0, rows:67588908                 |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+6 rows in set (29.28 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE select count(*) from a inner join b on a.b_id = b.id;
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| id                       | count       | task | operator info                                                | execution info                                  |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                               | time:29.514790405s, loops:2, rows:1             |
+| └─MergeJoin_236          | 89081241.25 | root | inner join, left key:test.a.b_id, right key:test.b.id        | time:29.514783409s, loops:2, rows:1             |
+|   ├─IndexReader_77       | 71264993.00 | root | index:IndexScan_76                                           | time:4.296467244s, loops:2227073, rows:71266248 |
+|   │ └─IndexScan_76       | 71264993.00 | cop  | table:a, index:b_id, c77, range:[NULL,+inf], keep order:true | time:0s, loops:0, rows:71266248                 |
+|   └─IndexReader_231      | 67655313.00 | root | index:IndexScan_230                                          | time:8.494617908s, loops:2112146, rows:67588672 |
+|     └─IndexScan_230      | 67655313.00 | cop  | table:b, index:id, range:[NULL,+inf], keep order:true        | time:0s, loops:0, rows:67588908                 |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+6 rows in set (29.52 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE select count(*) from a inner join b on a.b_id = b.id;
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| id                       | count       | task | operator info                                                | execution info                                  |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                               | time:29.374844547s, loops:2, rows:1             |
+| └─MergeJoin_236          | 89081241.25 | root | inner join, left key:test.a.b_id, right key:test.b.id        | time:29.374838152s, loops:2, rows:1             |
+|   ├─IndexReader_77       | 71264993.00 | root | index:IndexScan_76                                           | time:4.348313862s, loops:2227073, rows:71266248 |
+|   │ └─IndexScan_76       | 71264993.00 | cop  | table:a, index:b_id, c77, range:[NULL,+inf], keep order:true | time:0s, loops:0, rows:71266248                 |
+|   └─IndexReader_231      | 67655313.00 | root | index:IndexScan_230                                          | time:8.255528349s, loops:2112146, rows:67588672 |
+|     └─IndexScan_230      | 67655313.00 | cop  | table:b, index:id, range:[NULL,+inf], keep order:true        | time:0s, loops:0, rows:67588908                 |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+6 rows in set (29.37 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE select count(*) from a inner join b on a.b_id = b.id;
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| id                       | count       | task | operator info                                                | execution info                                  |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                               | time:29.261680694s, loops:2, rows:1             |
+| └─MergeJoin_236          | 89081241.25 | root | inner join, left key:test.a.b_id, right key:test.b.id        | time:29.261674487s, loops:2, rows:1             |
+|   ├─IndexReader_77       | 71264993.00 | root | index:IndexScan_76                                           | time:4.237904879s, loops:2227073, rows:71266248 |
+|   │ └─IndexScan_76       | 71264993.00 | cop  | table:a, index:b_id, c77, range:[NULL,+inf], keep order:true | time:0s, loops:0, rows:71266248                 |
+|   └─IndexReader_231      | 67655313.00 | root | index:IndexScan_230                                          | time:8.50406989s, loops:2112146, rows:67588672  |
+|     └─IndexScan_230      | 67655313.00 | cop  | table:b, index:id, range:[NULL,+inf], keep order:true        | time:0s, loops:0, rows:67588908                 |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+6 rows in set (29.26 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE select count(*) from a inner join b on a.b_id = b.id;
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| id                       | count       | task | operator info                                                | execution info                                  |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                               | time:29.179957007s, loops:2, rows:1             |
+| └─MergeJoin_236          | 89081241.25 | root | inner join, left key:test.a.b_id, right key:test.b.id        | time:29.179949799s, loops:2, rows:1             |
+|   ├─IndexReader_77       | 71264993.00 | root | index:IndexScan_76                                           | time:3.984067155s, loops:2227073, rows:71266248 |
+|   │ └─IndexScan_76       | 71264993.00 | cop  | table:a, index:b_id, c77, range:[NULL,+inf], keep order:true | time:0s, loops:0, rows:71266248                 |
+|   └─IndexReader_231      | 67655313.00 | root | index:IndexScan_230                                          | time:8.599759872s, loops:2112146, rows:67588672 |
+|     └─IndexScan_230      | 67655313.00 | cop  | table:b, index:id, range:[NULL,+inf], keep order:true        | time:0s, loops:0, rows:67588908                 |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+6 rows in set (29.19 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE select /*+ TIDB_HJ(a,b) */ count(*) from a inner join b on a.b_id = b.id;
++--------------------------+-------------+------+----------------------------------------------------------------------+--------------------------------------------------+
+| id                       | count       | task | operator info                                                        | execution info                                   |
++--------------------------+-------------+------+----------------------------------------------------------------------+--------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                                       | time:1m12.772722916s, loops:2, rows:1            |
+| └─HashLeftJoin_32        | 89081241.25 | root | inner join, inner:TableReader_24, equal:[eq(test.a.b_id, test.b.id)] | time:1m12.772710454s, loops:2, rows:1            |
+|   ├─TableReader_35       | 71264993.00 | root | data:TableScan_34                                                    | time:3.36915661s, loops:2227072, rows:71266248   |
+|   │ └─TableScan_34       | 71264993.00 | cop  | table:a, range:[-inf,+inf], keep order:false                         | time:0s, loops:0, rows:71266248                  |
+|   └─TableReader_24       | 67655313.00 | root | data:TableScan_23                                                    | time:11.564567025s, loops:2112155, rows:67588908 |
+|     └─TableScan_23       | 67655313.00 | cop  | table:b, range:[-inf,+inf], keep order:false                         | time:0s, loops:0, rows:67588908                  |
++--------------------------+-------------+------+----------------------------------------------------------------------+--------------------------------------------------+
+6 rows in set (1 min 12.78 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE select /*+ TIDB_HJ(a,b) */ count(*) from a inner join b on a.b_id = b.id;
++--------------------------+-------------+------+----------------------------------------------------------------------+--------------------------------------------------+
+| id                       | count       | task | operator info                                                        | execution info                                   |
++--------------------------+-------------+------+----------------------------------------------------------------------+--------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                                       | time:1m11.413107411s, loops:2, rows:1            |
+| └─HashLeftJoin_32        | 89081241.25 | root | inner join, inner:TableReader_24, equal:[eq(test.a.b_id, test.b.id)] | time:1m11.413096914s, loops:2, rows:1            |
+|   ├─TableReader_35       | 71264993.00 | root | data:TableScan_34                                                    | time:3.613110464s, loops:2227072, rows:71266248  |
+|   │ └─TableScan_34       | 71264993.00 | cop  | table:a, range:[-inf,+inf], keep order:false                         | time:0s, loops:0, rows:71266248                  |
+|   └─TableReader_24       | 67655313.00 | root | data:TableScan_23                                                    | time:11.588160175s, loops:2112155, rows:67588908 |
+|     └─TableScan_23       | 67655313.00 | cop  | table:b, range:[-inf,+inf], keep order:false                         | time:0s, loops:0, rows:67588908                  |
++--------------------------+-------------+------+----------------------------------------------------------------------+--------------------------------------------------+
+6 rows in set (1 min 11.41 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE select /*+ TIDB_HJ(a,b) */ count(*) from a inner join b on a.b_id = b.id;
++--------------------------+-------------+------+----------------------------------------------------------------------+--------------------------------------------------+
+| id                       | count       | task | operator info                                                        | execution info                                   |
++--------------------------+-------------+------+----------------------------------------------------------------------+--------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                                       | time:1m11.746707369s, loops:2, rows:1            |
+| └─HashLeftJoin_32        | 89081241.25 | root | inner join, inner:TableReader_24, equal:[eq(test.a.b_id, test.b.id)] | time:1m11.746697296s, loops:2, rows:1            |
+|   ├─TableReader_35       | 71264993.00 | root | data:TableScan_34                                                    | time:3.54913177s, loops:2227072, rows:71266248   |
+|   │ └─TableScan_34       | 71264993.00 | cop  | table:a, range:[-inf,+inf], keep order:false                         | time:0s, loops:0, rows:71266248                  |
+|   └─TableReader_24       | 67655313.00 | root | data:TableScan_23                                                    | time:11.454650493s, loops:2112155, rows:67588908 |
+|     └─TableScan_23       | 67655313.00 | cop  | table:b, range:[-inf,+inf], keep order:false                         | time:0s, loops:0, rows:67588908                  |
++--------------------------+-------------+------+----------------------------------------------------------------------+--------------------------------------------------+
+6 rows in set (1 min 11.75 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE select /*+ TIDB_HJ(a,b) */ count(*) from a inner join b on a.b_id = b.id;
++--------------------------+-------------+------+----------------------------------------------------------------------+-------------------------------------------------+
+| id                       | count       | task | operator info                                                        | execution info                                  |
++--------------------------+-------------+------+----------------------------------------------------------------------+-------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                                       | time:1m12.772184921s, loops:2, rows:1           |
+| └─HashLeftJoin_32        | 89081241.25 | root | inner join, inner:TableReader_24, equal:[eq(test.a.b_id, test.b.id)] | time:1m12.772163249s, loops:2, rows:1           |
+|   ├─TableReader_35       | 71264993.00 | root | data:TableScan_34                                                    | time:3.623654831s, loops:2227072, rows:71266248 |
+|   │ └─TableScan_34       | 71264993.00 | cop  | table:a, range:[-inf,+inf], keep order:false                         | time:0s, loops:0, rows:71266248                 |
+|   └─TableReader_24       | 67655313.00 | root | data:TableScan_23                                                    | time:11.62974448s, loops:2112155, rows:67588908 |
+|     └─TableScan_23       | 67655313.00 | cop  | table:b, range:[-inf,+inf], keep order:false                         | time:0s, loops:0, rows:67588908                 |
++--------------------------+-------------+------+----------------------------------------------------------------------+-------------------------------------------------+
+6 rows in set (1 min 12.78 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE select count(*) from a force index (b_id);
++------------------------+-------------+------+---------------------------------------------------------------+-------------------------------------+
+| id                     | count       | task | operator info                                                 | execution info                      |
++------------------------+-------------+------+---------------------------------------------------------------+-------------------------------------+
+| StreamAgg_17           | 1.00        | root | funcs:count(col_0)                                            | time:5.768090029s, loops:2, rows:1  |
+| └─IndexReader_18       | 1.00        | root | index:StreamAgg_8                                             | time:5.768036743s, loops:4, rows:75 |
+|   └─StreamAgg_8        | 1.00        | cop  | funcs:count(1)                                                |                                     |
+|     └─IndexScan_16     | 71264993.00 | cop  | table:a, index:b_id, c77, range:[NULL,+inf], keep order:false | time:0s, loops:0, rows:71266248     |
++------------------------+-------------+------+---------------------------------------------------------------+-------------------------------------+
+4 rows in set (5.77 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE select count(*) from a force index (b_id);
++------------------------+-------------+------+---------------------------------------------------------------+-------------------------------------+
+| id                     | count       | task | operator info                                                 | execution info                      |
++------------------------+-------------+------+---------------------------------------------------------------+-------------------------------------+
+| StreamAgg_17           | 1.00        | root | funcs:count(col_0)                                            | time:5.694791382s, loops:2, rows:1  |
+| └─IndexReader_18       | 1.00        | root | index:StreamAgg_8                                             | time:5.694738148s, loops:4, rows:75 |
+|   └─StreamAgg_8        | 1.00        | cop  | funcs:count(1)                                                |                                     |
+|     └─IndexScan_16     | 71264993.00 | cop  | table:a, index:b_id, c77, range:[NULL,+inf], keep order:false | time:0s, loops:0, rows:71266248     |
++------------------------+-------------+------+---------------------------------------------------------------+-------------------------------------+
+4 rows in set (5.70 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE select count(*) from a force index (b_id);
++------------------------+-------------+------+---------------------------------------------------------------+-------------------------------------+
+| id                     | count       | task | operator info                                                 | execution info                      |
++------------------------+-------------+------+---------------------------------------------------------------+-------------------------------------+
+| StreamAgg_17           | 1.00        | root | funcs:count(col_0)                                            | time:5.648876975s, loops:2, rows:1  |
+| └─IndexReader_18       | 1.00        | root | index:StreamAgg_8                                             | time:5.648829629s, loops:4, rows:75 |
+|   └─StreamAgg_8        | 1.00        | cop  | funcs:count(1)                                                |                                     |
+|     └─IndexScan_16     | 71264993.00 | cop  | table:a, index:b_id, c77, range:[NULL,+inf], keep order:false | time:0s, loops:0, rows:71266248     |
++------------------------+-------------+------+---------------------------------------------------------------+-------------------------------------+
+4 rows in set (5.65 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE select count(*) from a force index (b_id);
++------------------------+-------------+------+---------------------------------------------------------------+------------------------------------+
+| id                     | count       | task | operator info                                                 | execution info                     |
++------------------------+-------------+------+---------------------------------------------------------------+------------------------------------+
+| StreamAgg_17           | 1.00        | root | funcs:count(col_0)                                            | time:5.745977905s, loops:2, rows:1 |
+| └─IndexReader_18       | 1.00        | root | index:StreamAgg_8                                             | time:5.7459284s, loops:4, rows:75  |
+|   └─StreamAgg_8        | 1.00        | cop  | funcs:count(1)                                                |                                    |
+|     └─IndexScan_16     | 71264993.00 | cop  | table:a, index:b_id, c77, range:[NULL,+inf], keep order:false | time:0s, loops:0, rows:71266248    |
++------------------------+-------------+------+---------------------------------------------------------------+------------------------------------+
+4 rows in set (5.75 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE select count(*) from a force index (b_id);
++------------------------+-------------+------+---------------------------------------------------------------+------------------------------------+
+| id                     | count       | task | operator info                                                 | execution info                     |
++------------------------+-------------+------+---------------------------------------------------------------+------------------------------------+
+| StreamAgg_17           | 1.00        | root | funcs:count(col_0)                                            | time:5.904268869s, loops:2, rows:1 |
+| └─IndexReader_18       | 1.00        | root | index:StreamAgg_8                                             | time:5.90421434s, loops:4, rows:75 |
+|   └─StreamAgg_8        | 1.00        | cop  | funcs:count(1)                                                |                                    |
+|     └─IndexScan_16     | 71264993.00 | cop  | table:a, index:b_id, c77, range:[NULL,+inf], keep order:false | time:0s, loops:0, rows:71266248    |
++------------------------+-------------+------+---------------------------------------------------------------+------------------------------------+
+4 rows in set (5.90 sec)
+
+** Update a.b_id to be NULL except for 1000 rows **
+
+ANALYZE TABLE a;
+ANALYZE TABLE b;
+
+
+mysql [127.0.0.1] {root} (test) > SELECT AVG(LENGTH(id)) FROM a;
+
++-----------------+
+| AVG(LENGTH(id)) |
++-----------------+
+|         32.0000 |
++-----------------+
+1 row in set (26.60 sec)
+
+mysql [127.0.0.1] {root} (test) > SELECT COUNT(*) FROM a WHERE b_id IS NULL;
++----------+
+| COUNT(*) |
++----------+
+| 71256248 |
++----------+
+1 row in set (4.52 sec)
+
+mysql [127.0.0.1] {root} (test) > SELECT COUNT(*) FROM a WHERE b_id IS NOT NULL;
++----------+
+| COUNT(*) |
++----------+
+|    10000 |
++----------+
+1 row in set (0.23 sec)
+
+mysql [127.0.0.1] {root} (test) > SELECT COUNT(*) FROM a INNER JOIN b ON a.b_id = b.id;
++----------+
+| COUNT(*) |
++----------+
+|        0 |
++----------+
+1 row in set (28.49 sec)
+
+
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE SELECT count(*) FROM a INNER JOIN b ON a.b_id = b.id;
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| id                       | count       | task | operator info                                                | execution info                                  |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                               | time:28.161534882s, loops:2, rows:1             |
+| └─MergeJoin_236          | 89082810.00 | root | inner join, left key:test.a.b_id, right key:test.b.id        | time:28.161526767s, loops:1, rows:0             |
+|   ├─IndexReader_77       | 71266248.00 | root | index:IndexScan_76                                           | time:3.911482572s, loops:2227072, rows:71266248 |
+|   │ └─IndexScan_76       | 71266248.00 | cop  | table:a, index:b_id, c77, range:[NULL,+inf], keep order:true | time:0s, loops:0, rows:71266248                 |
+|   └─IndexReader_231      | 67588908.00 | root | index:IndexScan_230                                          | time:7.91977515s, loops:2111847, rows:67579104  |
+|     └─IndexScan_230      | 67588908.00 | cop  | table:b, index:id, range:[NULL,+inf], keep order:true        | time:0s, loops:0, rows:67588908                 |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+6 rows in set (28.17 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE SELECT count(*) FROM a INNER JOIN b ON a.b_id = b.id;
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| id                       | count       | task | operator info                                                | execution info                                  |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                               | time:28.414124611s, loops:2, rows:1             |
+| └─MergeJoin_236          | 89082810.00 | root | inner join, left key:test.a.b_id, right key:test.b.id        | time:28.414118781s, loops:1, rows:0             |
+|   ├─IndexReader_77       | 71266248.00 | root | index:IndexScan_76                                           | time:3.96906065s, loops:2227072, rows:71266248  |
+|   │ └─IndexScan_76       | 71266248.00 | cop  | table:a, index:b_id, c77, range:[NULL,+inf], keep order:true | time:0s, loops:0, rows:71266248                 |
+|   └─IndexReader_231      | 67588908.00 | root | index:IndexScan_230                                          | time:8.237313549s, loops:2111847, rows:67579104 |
+|     └─IndexScan_230      | 67588908.00 | cop  | table:b, index:id, range:[NULL,+inf], keep order:true        | time:0s, loops:0, rows:67588908                 |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+6 rows in set (28.42 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE SELECT count(*) FROM a INNER JOIN b ON a.b_id = b.id;
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| id                       | count       | task | operator info                                                | execution info                                  |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                               | time:29.095594997s, loops:2, rows:1             |
+| └─MergeJoin_236          | 89082810.00 | root | inner join, left key:test.a.b_id, right key:test.b.id        | time:29.095589685s, loops:1, rows:0             |
+|   ├─IndexReader_77       | 71266248.00 | root | index:IndexScan_76                                           | time:4.354012102s, loops:2227072, rows:71266248 |
+|   │ └─IndexScan_76       | 71266248.00 | cop  | table:a, index:b_id, c77, range:[NULL,+inf], keep order:true | time:0s, loops:0, rows:71266248                 |
+|   └─IndexReader_231      | 67588908.00 | root | index:IndexScan_230                                          | time:8.396722496s, loops:2111847, rows:67579104 |
+|     └─IndexScan_230      | 67588908.00 | cop  | table:b, index:id, range:[NULL,+inf], keep order:true        | time:0s, loops:0, rows:67588908                 |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+6 rows in set (29.10 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE SELECT count(*) FROM a INNER JOIN b ON a.b_id = b.id;
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| id                       | count       | task | operator info                                                | execution info                                  |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                               | time:30.535764235s, loops:2, rows:1             |
+| └─MergeJoin_236          | 89082810.00 | root | inner join, left key:test.a.b_id, right key:test.b.id        | time:30.535759027s, loops:1, rows:0             |
+|   ├─IndexReader_77       | 71266248.00 | root | index:IndexScan_76                                           | time:4.220455825s, loops:2227072, rows:71266248 |
+|   │ └─IndexScan_76       | 71266248.00 | cop  | table:a, index:b_id, c77, range:[NULL,+inf], keep order:true | time:0s, loops:0, rows:71266248                 |
+|   └─IndexReader_231      | 67588908.00 | root | index:IndexScan_230                                          | time:9.115781902s, loops:2111847, rows:67579104 |
+|     └─IndexScan_230      | 67588908.00 | cop  | table:b, index:id, range:[NULL,+inf], keep order:true        | time:0s, loops:0, rows:67588908                 |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+6 rows in set (30.54 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE SELECT count(*) FROM a INNER JOIN b ON a.b_id = b.id;
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| id                       | count       | task | operator info                                                | execution info                                  |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                               | time:28.914583571s, loops:2, rows:1             |
+| └─MergeJoin_236          | 89082810.00 | root | inner join, left key:test.a.b_id, right key:test.b.id        | time:28.914580126s, loops:1, rows:0             |
+|   ├─IndexReader_77       | 71266248.00 | root | index:IndexScan_76                                           | time:4.283516968s, loops:2227072, rows:71266248 |
+|   │ └─IndexScan_76       | 71266248.00 | cop  | table:a, index:b_id, c77, range:[NULL,+inf], keep order:true | time:0s, loops:0, rows:71266248                 |
+|   └─IndexReader_231      | 67588908.00 | root | index:IndexScan_230                                          | time:8.364100916s, loops:2111847, rows:67579104 |
+|     └─IndexScan_230      | 67588908.00 | cop  | table:b, index:id, range:[NULL,+inf], keep order:true        | time:0s, loops:0, rows:67588908                 |
++--------------------------+-------------+------+--------------------------------------------------------------+-------------------------------------------------+
+6 rows in set (28.92 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE SELECT /*+ TIDB_INLJ(a,b) */ count(*) FROM a INNER JOIN b ON a.b_id = b.id;
++--------------------------+-------------+------+------------------------------------------------------------------------------+-------------------------------------------------+
+| id                       | count       | task | operator info                                                                | execution info                                  |
++--------------------------+-------------+------+------------------------------------------------------------------------------+-------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                                               | time:11.664824628s, loops:2, rows:1             |
+| └─IndexJoin_21           | 89082810.00 | root | inner join, inner:IndexReader_20, outer key:test.a.b_id, inner key:test.b.id | time:11.66482065s, loops:1, rows:0              |
+|   ├─TableReader_23       | 71266248.00 | root | data:TableScan_22                                                            | time:4.721762136s, loops:2227073, rows:71266248 |
+|   │ └─TableScan_22       | 71266248.00 | cop  | table:a, range:[-inf,+inf], keep order:false                                 | time:0s, loops:0, rows:71266248                 |
+|   └─IndexReader_20       | 1.00        | root | index:IndexScan_19                                                           | time:337.472913ms, loops:2856, rows:0           |
+|     └─IndexScan_19       | 1.00        | cop  | table:b, index:id, range: decided by [test.a.b_id], keep order:false         | time:0s, loops:0, rows:0                        |
++--------------------------+-------------+------+------------------------------------------------------------------------------+-------------------------------------------------+
+6 rows in set (11.67 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE SELECT /*+ TIDB_INLJ(a,b) */ count(*) FROM a INNER JOIN b ON a.b_id = b.id;
++--------------------------+-------------+------+------------------------------------------------------------------------------+-------------------------------------------------+
+| id                       | count       | task | operator info                                                                | execution info                                  |
++--------------------------+-------------+------+------------------------------------------------------------------------------+-------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                                               | time:11.595156409s, loops:2, rows:1             |
+| └─IndexJoin_21           | 89082810.00 | root | inner join, inner:IndexReader_20, outer key:test.a.b_id, inner key:test.b.id | time:11.595151729s, loops:1, rows:0             |
+|   ├─TableReader_23       | 71266248.00 | root | data:TableScan_22                                                            | time:4.411524154s, loops:2227073, rows:71266248 |
+|   │ └─TableScan_22       | 71266248.00 | cop  | table:a, range:[-inf,+inf], keep order:false                                 | time:0s, loops:0, rows:71266248                 |
+|   └─IndexReader_20       | 1.00        | root | index:IndexScan_19                                                           | time:328.082556ms, loops:2856, rows:0           |
+|     └─IndexScan_19       | 1.00        | cop  | table:b, index:id, range: decided by [test.a.b_id], keep order:false         | time:0s, loops:0, rows:0                        |
++--------------------------+-------------+------+------------------------------------------------------------------------------+-------------------------------------------------+
+6 rows in set (11.60 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE SELECT /*+ TIDB_INLJ(a,b) */ count(*) FROM a INNER JOIN b ON a.b_id = b.id;
++--------------------------+-------------+------+------------------------------------------------------------------------------+-------------------------------------------------+
+| id                       | count       | task | operator info                                                                | execution info                                  |
++--------------------------+-------------+------+------------------------------------------------------------------------------+-------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                                               | time:11.585016964s, loops:2, rows:1             |
+| └─IndexJoin_21           | 89082810.00 | root | inner join, inner:IndexReader_20, outer key:test.a.b_id, inner key:test.b.id | time:11.58501295s, loops:1, rows:0              |
+|   ├─TableReader_23       | 71266248.00 | root | data:TableScan_22                                                            | time:4.478417979s, loops:2227073, rows:71266248 |
+|   │ └─TableScan_22       | 71266248.00 | cop  | table:a, range:[-inf,+inf], keep order:false                                 | time:0s, loops:0, rows:71266248                 |
+|   └─IndexReader_20       | 1.00        | root | index:IndexScan_19                                                           | time:314.719237ms, loops:2856, rows:0           |
+|     └─IndexScan_19       | 1.00        | cop  | table:b, index:id, range: decided by [test.a.b_id], keep order:false         | time:0s, loops:0, rows:0                        |
++--------------------------+-------------+------+------------------------------------------------------------------------------+-------------------------------------------------+
+6 rows in set (11.59 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE SELECT /*+ TIDB_INLJ(a,b) */ count(*) FROM a INNER JOIN b ON a.b_id = b.id;
++--------------------------+-------------+------+------------------------------------------------------------------------------+-------------------------------------------------+
+| id                       | count       | task | operator info                                                                | execution info                                  |
++--------------------------+-------------+------+------------------------------------------------------------------------------+-------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                                               | time:11.536306688s, loops:2, rows:1             |
+| └─IndexJoin_21           | 89082810.00 | root | inner join, inner:IndexReader_20, outer key:test.a.b_id, inner key:test.b.id | time:11.536302577s, loops:1, rows:0             |
+|   ├─TableReader_23       | 71266248.00 | root | data:TableScan_22                                                            | time:4.613104786s, loops:2227073, rows:71266248 |
+|   │ └─TableScan_22       | 71266248.00 | cop  | table:a, range:[-inf,+inf], keep order:false                                 | time:0s, loops:0, rows:71266248                 |
+|   └─IndexReader_20       | 1.00        | root | index:IndexScan_19                                                           | time:326.433913ms, loops:2856, rows:0           |
+|     └─IndexScan_19       | 1.00        | cop  | table:b, index:id, range: decided by [test.a.b_id], keep order:false         | time:0s, loops:0, rows:0                        |
++--------------------------+-------------+------+------------------------------------------------------------------------------+-------------------------------------------------+
+6 rows in set (11.54 sec)
+
+mysql [127.0.0.1] {root} (test) > EXPLAIN ANALYZE SELECT /*+ TIDB_INLJ(a,b) */ count(*) FROM a INNER JOIN b ON a.b_id = b.id;
++--------------------------+-------------+------+------------------------------------------------------------------------------+-------------------------------------------------+
+| id                       | count       | task | operator info                                                                | execution info                                  |
++--------------------------+-------------+------+------------------------------------------------------------------------------+-------------------------------------------------+
+| StreamAgg_11             | 1.00        | root | funcs:count(1)                                                               | time:11.388132143s, loops:2, rows:1             |
+| └─IndexJoin_21           | 89082810.00 | root | inner join, inner:IndexReader_20, outer key:test.a.b_id, inner key:test.b.id | time:11.388128525s, loops:1, rows:0             |
+|   ├─TableReader_23       | 71266248.00 | root | data:TableScan_22                                                            | time:4.508999407s, loops:2227073, rows:71266248 |
+|   │ └─TableScan_22       | 71266248.00 | cop  | table:a, range:[-inf,+inf], keep order:false                                 | time:0s, loops:0, rows:71266248                 |
+|   └─IndexReader_20       | 1.00        | root | index:IndexScan_19                                                           | time:315.211886ms, loops:2856, rows:0           |
+|     └─IndexScan_19       | 1.00        | cop  | table:b, index:id, range: decided by [test.a.b_id], keep order:false         | time:0s, loops:0, rows:0                        |
++--------------------------+-------------+------+------------------------------------------------------------------------------+-------------------------------------------------+
+6 rows in set (11.39 sec)
 
 

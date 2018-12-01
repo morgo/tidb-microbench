@@ -1,0 +1,21 @@
+1) Does a nested loop join improve performance?
+i.e. EXPLAIN ANALYZE SELECT /*+ TIDB_INLJ(a,b) */ count(*) FROM a INNER JOIN b ON a.b_id = b.id;
+
+2) What is the output of the following:
+
+ANALYZE TABLE a;
+ANALYZE TABLE b;
+SELECT AVG(LENGTH(id)) FROM a;
+SELECT COUNT(*) FROM a WHERE b_id IS NULL;
+SELECT COUNT(*) FROM a WHERE b_id IS NOT NULL;
+SELECT COUNT(*) FROM a INNER JOIN b ON a.b_id = b.id;
+EXPLAIN ANALYZE SELECT count(*) FROM a INNER JOIN b ON a.b_id = b.id;
+EXPLAIN ANALYZE SELECT count(*) FROM a INNER JOIN b ON a.b_id = b.id;
+EXPLAIN ANALYZE SELECT count(*) FROM a INNER JOIN b ON a.b_id = b.id;
+EXPLAIN ANALYZE SELECT count(*) FROM a INNER JOIN b ON a.b_id = b.id;
+EXPLAIN ANALYZE SELECT count(*) FROM a INNER JOIN b ON a.b_id = b.id;
+EXPLAIN ANALYZE SELECT /*+ TIDB_INLJ(a,b) */ count(*) FROM a INNER JOIN b ON a.b_id = b.id;
+EXPLAIN ANALYZE SELECT /*+ TIDB_INLJ(a,b) */ count(*) FROM a INNER JOIN b ON a.b_id = b.id;
+EXPLAIN ANALYZE SELECT /*+ TIDB_INLJ(a,b) */ count(*) FROM a INNER JOIN b ON a.b_id = b.id;
+EXPLAIN ANALYZE SELECT /*+ TIDB_INLJ(a,b) */ count(*) FROM a INNER JOIN b ON a.b_id = b.id;
+EXPLAIN ANALYZE SELECT /*+ TIDB_INLJ(a,b) */ count(*) FROM a INNER JOIN b ON a.b_id = b.id;
