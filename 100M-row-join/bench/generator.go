@@ -29,11 +29,9 @@ func main() {
 	abuf := new(bytes.Buffer)
 	bbuf := new(bytes.Buffer)
 
-	// todo: for TiDB do we need to pad out the row to be comparable?
-
 	for a := 0; a <= 1000; a++ {
 		// assume that b_id is mostly null
-		if a < 3 {
+		if a < 1 {
 			abuf.WriteString("(REPLACE(UUID(),'-',''), REPLACE(UUID(),'-','')),")
 		} else {
 			abuf.WriteString("(REPLACE(UUID(),'-',''), NULL),")
