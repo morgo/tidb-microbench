@@ -1,5 +1,9 @@
-1) Does a nested loop join improve performance?
+1a) Does a nested loop join improve performance?
 i.e. EXPLAIN ANALYZE SELECT /*+ TIDB_INLJ(a,b) */ count(*) FROM a INNER JOIN b ON a.b_id = b.id;
+
+1b) Are there are lot of nullable values.  i.e. does this rewrite improve performance?
+
+EXPLAIN ANALYZE SELECT /*+ TIDB_INLJ(a,b) */ count(*) FROM a INNER JOIN b ON a.b_id = b.id WHERE a.b_id IS NOT NULL AND b.id IS NOT NULL;
 
 2) What is the output of the following:
 
@@ -9,6 +13,9 @@ SELECT AVG(LENGTH(id)) FROM a;
 SELECT COUNT(*) FROM a WHERE b_id IS NULL;
 SELECT COUNT(*) FROM a WHERE b_id IS NOT NULL;
 SELECT COUNT(*) FROM a INNER JOIN b ON a.b_id = b.id;
+select count(distinct b_id) from a;
+select count(distinct id) from b;
+
 EXPLAIN ANALYZE SELECT count(*) FROM a INNER JOIN b ON a.b_id = b.id;
 EXPLAIN ANALYZE SELECT count(*) FROM a INNER JOIN b ON a.b_id = b.id;
 EXPLAIN ANALYZE SELECT count(*) FROM a INNER JOIN b ON a.b_id = b.id;
@@ -19,3 +26,8 @@ EXPLAIN ANALYZE SELECT /*+ TIDB_INLJ(a,b) */ count(*) FROM a INNER JOIN b ON a.b
 EXPLAIN ANALYZE SELECT /*+ TIDB_INLJ(a,b) */ count(*) FROM a INNER JOIN b ON a.b_id = b.id;
 EXPLAIN ANALYZE SELECT /*+ TIDB_INLJ(a,b) */ count(*) FROM a INNER JOIN b ON a.b_id = b.id;
 EXPLAIN ANALYZE SELECT /*+ TIDB_INLJ(a,b) */ count(*) FROM a INNER JOIN b ON a.b_id = b.id;
+
+3) 
+
+Are you able to export statistics?
+https://github.com/pingcap/docs/blob/master/sql/statistics.md#export-statistics
