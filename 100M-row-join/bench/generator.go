@@ -14,7 +14,7 @@ import (
 func main() {
 
 	connection := os.Getenv("CONNECTION")
-	threads := 32
+	threads := 8 
 
 	db, err := sql.Open("mysql", connection)
 	if err != nil {
@@ -29,7 +29,7 @@ func main() {
 	abuf := new(bytes.Buffer)
 	bbuf := new(bytes.Buffer)
 
-	for a := 0; a <= 10000; a++ {
+	for a := 0; a <= 1000; a++ {
 		// assume that b_id is mostly null
 		if a < 1 {
 			abuf.WriteString("(REPLACE(UUID(),'-',''), REPLACE(UUID(),'-','')),")
